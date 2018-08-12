@@ -1,10 +1,10 @@
 Package: iivestimatoR
 Title: Implements the imperfect instrumental variable regression
 Version: 0.0.0.9000
-Authors@R: person("Chtonios", email = "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
-Depends: R (>= 3.4.2),tidyr, AER, readr, MASS, haven, sandwich
-Imports: tidyr, AER, readr, MASS, haven, sandwich
+Authors@R: person("Chtonios", role="aut")
+Description: Implements the various estimators from the paper "identification with imperfect instrumental variables" by A. Nevo and A.Rosen (2012)
+Depends: R (>= 3.4.2),tidyr, AER, ready, MASS, haven, sandwich
+Imports: tidyr, AER, ready, MASS, haven, sandwich
 License: MIT
 Encoding: UTF-8
 LazyData: true

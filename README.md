@@ -1,2 +1,2 @@
 # IIV
-Implements the imperfect variable estimiation 
+Implements the imperfect instrumental variable estimiation 

@@ -1,0 +1,330 @@
+---
+title: "iiv_card_example"
+author: "chtonios"
+date: "2017/18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Example implementation of the IIV estimator
+
+The dataset used is the famous card dataset. It was downloaded from https://www.stata.com/texts/eacsap/.
+
+The confidence intervalls are then estimated using bootstrap
+
+First we need to read in the data: (Change working directory or path to card dataset to your own settings).
+
+```{r Data reading}
+    ## Read in data from Card
+card <- read_dta("card.dta")
+    ## create needed variables
+card$distance2 <- (1-card$nearc2)
+card$distance4 <- (1- card$nearc4)
+card$exper2 <- card$exper^2
+card$age2 <- card$age^2
+```
+
+Baseline regressions from Verbeek (2004)
+
+```{r Verbeek Regressions}
+    ##  for purpose of comparison, replicate OLS
+    ## and IV regressions as found in Verbeek (2004)
+    ## note that the coefficients and std. errors are
+    ## identical and no robust estimates were created
+Verbeek.OLS <- lm(log(wage) ~ educ + exper + I(exper^2) + black + smsa + south,
+               data=card)
+Verbeek.IV <- ivreg(log(wage) ~ educ + exper + I(exper^2) + black + smsa +
+                      south | nearc4 + age + I(age^2) + black + smsa+ south,
+                    data=card)
+summary(Verbeek.OLS)
+summary(Verbeek.IV)
+```
+
+The first application where the correlation between education and the error term is assumed to be negative.
+
+```{r Table1 IIV}
+    ## Note: the covar direction is weak.positive because cov(x,u) and cov(x_wig,z)
+    ## are both negative and multiplied that yields a positive number
+    ## see either our term paper or the paper of Nevo and Rosen
+BetaCoefsCard <- Multiple.Linear.IIV.beta(data=card, dep.var = log(card$wage),
+                                         endo.regressor = card$educ,
+                                         instrument = card$distance4,
+                                         exog.regressors = c("black",
+                                                             "exper",
+                                                             "exper2",
+                                                             "smsa",
+                                                             "south"),
+                                         valid.instruments = c("black",
+                                                               "age",
+                                                               "age2",
+                                                               "smsa",
+                                                               "south"),
+                                         covar.direction = "weak.positive")
+BetaCoefsCard
+
+```
+
+And the estimates for the other coefficients
+
+```{r Table 1 other Coefs}
+OtherCoefsCard <- Multiple.Linear.IIV.other(data=card,
+                          dep.var = log(card$wage),
+                          endo.regressor = card$educ,
+                          exog.regressors = c("black","exper","exper2", "smsa", "south"),
+                          valid.instruments = c("black","age","age2", "smsa", "south"),
+                          beta.low = BetaCoefsCard[1],
+                          beta.upp = BetaCoefsCard[2])
+OtherCoefsCard$Coefs
+```
+
+The second example uses two instruments which are positively correlated with the error term to create an instrument which is negatively correlated with the error term. The following tests check whether the conditions outlined in the paper are satisfied.
+```{r Table 2 preliminary tests}
+      ## read in data
+data=card
+endo.regressor = card$educ
+dep.var = log(card$wage)
+exog.regressors <- c("black", "exper","exper2", "smsa", "south")
+valid.instruments <- c("black", "age","age2", "smsa", "south")
+instrument1 <- card$nearc4
+instrument2 <- card$nearc2
+
+      ## as usual we need X and Y wiggle
+IV.X <- ivreg(as.formula(paste("endo.regressor ~ ",
+                                paste(exog.regressors,collapse = "+"),
+                                "|", paste(valid.instruments, collapse = "+"))),
+                 data = data)
+IV.Y <- ivreg(as.formula(paste("dep.var ~ ",
+                               paste(exog.regressors,collapse = "+"),
+                                "|", paste(valid.instruments, collapse = "+"))),
+                   data = data)
+X.wiggle <- as.matrix(IV.X$residuals)
+Y.wiggle <- as.matrix(IV.Y$residuals)
+
+      ## Check whether our variables satisfy the 
+      ## conditions from the paper
+Cond1 <- Multiple.Direction(X.wiggle, endo.regressor, instrument1) #1 weakly larger than 0
+Cond2 <- Multiple.Direction(X.wiggle, endo.regressor, instrument2) #2 same
+
+gamma <- 0.4 # defined by researchers
+omega <- ((gamma*instrument2) - ((1-gamma)*instrument1))
+Cond3 <- Multiple.Direction(X.wiggle, endo.regressor, omega) # should be smaller than 0
+print(paste(Cond1,Cond2, Cond3))
+```
+It seems that our instruments satisfy the necessary conditions.
+
+
+As support for the existence of an ability bias: the OLS with IQ.
+```{r Table 2 OLS with IQ}
+        ## Regression including IQ
+Verbeek.OLSIQ <- lm(log(wage) ~ educ + exper + I(exper^2) + black + smsa + south + IQ,
+               data=card)
+Verbeek.OLSKWW <- lm(log(wage) ~ educ + exper + I(exper^2) + black + smsa + south + KWW,
+               data=card)
+summary(Verbeek.OLSIQ)
+summary(Verbeek.OLSKWW)
+```
+
+Now we take the original data from card (i.e. near college not the distance itself, see explications in termpaper) and estimate our bounds.
+
+```{r Table 2 IIV bounds}
+TwoBounds <- Two.Instr.Bounds(data=card,
+                              endo.regressor = card$educ,
+                              dep.var = log(card$wage),
+                              exog.regressors = c("card$black", "card$exper","card$exper2",
+                                                  "card$smsa", "card$south"),
+                              valid.instruments = c("card$black", "card$age",
+                                                    "card$age2", "card$smsa", "card$south"),
+                              instrument1 = card$nearc4,
+                              instrument2 = card$nearc2,
+                              gamma.value = 0.4)
+TwoBounds$coefs
+```
+
+
+```{r Table 2 other Coefs}
+OtherCoefsTwobounds <- Multiple.Linear.IIV.other(data=card,
+                          dep.var = log(card$wage),
+                          endo.regressor = card$educ,
+                          exog.regressors = c("black","exper","exper2", "smsa", "south"),
+                          valid.instruments = c("black","age","age2", "smsa", "south"),
+                          beta.low = TwoBounds$coefs[1],
+                          beta.upp = TwoBounds$coefs[2])
+OtherCoefsTwobounds$Coefs
+```
+
+Note, that these results with the original data (and also assumptions made by Card) would confirm his primary intuition that an ability bias exists. His results were quite different to what could have been expected under that hypothesis because (apparently) his instruments were imperfect.
+
+What is left for inference is to construct the confidence intervalls:
+```{r Table two IIV CI}
+        ## All coefs and std. errors are within the id set
+        ## need to set up bootstrap to get corr matrix
+        ## note that there is a typo in the paper which
+        ## incorrectly specifies the Omega matrix as a
+        ## var-covar matrix (information provided by
+        ## Adam Rosen)
+        ## Inference procedure as described on p.666 in
+        ## the paper
+
+        ## initialize bootstrap stuff
+B <- 500
+number <- 3010 #resample same size set
+BootstrapSe <- matrix(nrow=B, ncol = 5)
+        ## set seed for reproducability
+set.seed(1993)
+for(b in 1:B)
+{
+  
+  u <- ceiling(runif(n=number, min = 0, max = 1)*3010)
+  datab <- card[u,]
+  Temp <- Two.Instr.Bounds(data=datab,
+                           endo.regressor = datab$educ,
+                           dep.var = log(datab$wage),
+                           exog.regressors = c("card$black", "card$exper","card$exper2",
+                                                  "card$smsa", "card$south"),
+                              valid.instruments = c("card$black", "card$age",
+                                                    "card$age2", "card$smsa", "card$south"),
+                           instrument1 = datab$nearc4,
+                           instrument2 = datab$nearc2,
+                           gamma.value = 0.4)
+  
+  BootstrapSe[b,1] <- Temp$matrix[1,1]
+  BootstrapSe[b,2] <- Temp$matrix[2,1]
+  BootstrapSe[b,3] <- Temp$matrix[3,1]
+  BootstrapSe[b,4] <- Temp$matrix[4,1]
+  BootstrapSe[b,5] <- Temp$matrix[5,1]
+}
+        ## Prepare Values
+Omega.Mat <- cor(BootstrapSe)
+A <- mean(BootstrapSe[,1])
+B <- mean(BootstrapSe[,2])
+C <- mean(BootstrapSe[,3])
+D <- mean(BootstrapSe[,4])
+E <- mean(BootstrapSe[,5])
+meanvalues <- matrix(c(A,B,C,D,E))
+p <- 0.9
+Confidencebounds <- matrix(nrow=1, ncol = 2)
+colnames(Confidencebounds) <- c("LowerCI", "UpperCI")
+        ## Compute CI bounds
+        ## of course with a seed
+set.seed(1993)
+Z.Mat <- mvrnorm(1000, mu= meanvalues, Sigma = Omega.Mat, tol=0.01)
+
+std.err.vec <- TwoBounds$matrix[,2]*quantile(Z.Mat,p)
+Confidencebounds[1,1] <- TwoBounds$B.Omeg-sqrt(vcovHC(TwoBounds$IVOmeg, "HC")[2,2])*pnorm(q=p)
+Confidencebounds[1,2] <- min(TwoBounds$matrix[,1]+std.err.vec)
+Confidencebounds
+
+``` 
+
+### 5. Appendix
+- Correlations mentioned in termpaper
+- Inference procedure for other coefficients
+
+```{r Correlations in paper}
+card1 <- drop_na(card)
+round(cor(card$nearc4, card$educ),3)
+round(cor(card1$educ, card1$IQ),3)
+```
+
+
+```{r Table 1 Other coefs CI}
+        ## Bootstrapping CIs for other coefficients
+        ## For single IIV
+B = 500
+number <- 3010 #resample same size set
+BootstrapSe1 <- matrix(nrow=B, ncol = 12)
+set.seed(1993)
+for(b in 1:B)
+{
+  
+  u <- ceiling(runif(n=number, min = 0, max = 1)*3010)
+  datab <- card[u,]
+  Temp1  <- Multiple.Linear.IIV.other(data=datab,
+                          dep.var = log(datab$wage),
+                          endo.regressor = datab$educ,
+                          exog.regressors = c("black","exper","exper2", "smsa", "south"),
+                          valid.instruments = c("black","age","age2", "smsa", "south"),
+                          beta.low = BetaCoefsCard[1],
+                          beta.upp = BetaCoefsCard[2])
+  BootstrapSe1[b,1] <- Temp1$Coefs[1,1]
+  BootstrapSe1[b,2] <- Temp1$Coefs[1,2]
+  BootstrapSe1[b,3] <- Temp1$Coefs[1,3]
+  BootstrapSe1[b,4] <- Temp1$Coefs[1,4]
+  BootstrapSe1[b,5] <- Temp1$Coefs[1,5]
+  BootstrapSe1[b,6] <- Temp1$Coefs[1,6]
+  BootstrapSe1[b,7] <- Temp1$Coefs[2,1]
+  BootstrapSe1[b,8] <- Temp1$Coefs[2,2]
+  BootstrapSe1[b,9] <- Temp1$Coefs[2,3]
+  BootstrapSe1[b,10] <- Temp1$Coefs[2,4]
+  BootstrapSe1[b,11] <- Temp1$Coefs[2,5]
+  BootstrapSe1[b,12] <- Temp1$Coefs[2,6]
+}
+
+OtherCoefsCard$Coefs[1,1] + sd(BootstrapSe1[,1])*pnorm(q=p)
+OtherCoefsCard$Coefs[1,2] - sd(BootstrapSe1[,2])*pnorm(q=p)
+OtherCoefsCard$Coefs[1,3] + sd(BootstrapSe1[,3])*pnorm(q=p)
+OtherCoefsCard$Coefs[1,4] - sd(BootstrapSe1[,4])*pnorm(q=p)
+OtherCoefsCard$Coefs[1,5] + sd(BootstrapSe1[,5])*pnorm(q=p)
+OtherCoefsCard$Coefs[1,6] - sd(BootstrapSe1[,6])*pnorm(q=p)
+OtherCoefsCard$Coefs[2,1] - sd(BootstrapSe1[,7])*pnorm(q=p)
+OtherCoefsCard$Coefs[2,2] + sd(BootstrapSe1[,8])*pnorm(q=p)
+OtherCoefsCard$Coefs[2,3] - sd(BootstrapSe1[,9])*pnorm(q=p)
+OtherCoefsCard$Coefs[2,4] + sd(BootstrapSe1[,10])*pnorm(q=p)
+OtherCoefsCard$Coefs[2,5] - sd(BootstrapSe1[,11])*pnorm(q=p)
+OtherCoefsCard$Coefs[2,6] + sd(BootstrapSe1[,12])*pnorm(q=p)
+OtherCoefsCard$Coefs
+```
+
+
+```{r Table 2 other coefs CI}
+        ## Bootstrapping CIs for other coefficients
+B = 500
+number <- 3010 #resample same size set
+BootstrapSe1 <- matrix(nrow=B, ncol = 12)
+set.seed(1993)
+for(b in 1:B)
+{
+  
+  u <- ceiling(runif(n=number, min = 0, max = 1)*3010)
+  datab <- card[u,]
+  Temp1  <- Multiple.Linear.IIV.other(data=datab,
+                          dep.var = log(datab$wage),
+                          endo.regressor = datab$educ,
+                          exog.regressors = c("black","exper","exper2", "smsa", "south"),
+                          valid.instruments = c("black","age","age2", "smsa", "south"),
+                          beta.low = TwoBounds$coefs[1],
+                          beta.upp = TwoBounds$coefs[2])
+  BootstrapSe1[b,1] <- Temp1$Coefs[1,1]
+  BootstrapSe1[b,2] <- Temp1$Coefs[1,2]
+  BootstrapSe1[b,3] <- Temp1$Coefs[1,3]
+  BootstrapSe1[b,4] <- Temp1$Coefs[1,4]
+  BootstrapSe1[b,5] <- Temp1$Coefs[1,5]
+  BootstrapSe1[b,6] <- Temp1$Coefs[1,6]
+  BootstrapSe1[b,7] <- Temp1$Coefs[2,1]
+  BootstrapSe1[b,8] <- Temp1$Coefs[2,2]
+  BootstrapSe1[b,9] <- Temp1$Coefs[2,3]
+  BootstrapSe1[b,10] <- Temp1$Coefs[2,4]
+  BootstrapSe1[b,11] <- Temp1$Coefs[2,5]
+  BootstrapSe1[b,12] <- Temp1$Coefs[2,6]
+}
+
+OtherCoefsTwobounds$Coefs[1,1] + sd(BootstrapSe1[,1])*pnorm(q=p)
+OtherCoefsTwobounds$Coefs[1,2] - sd(BootstrapSe1[,2])*pnorm(q=p)
+OtherCoefsTwobounds$Coefs[1,3] + sd(BootstrapSe1[,3])*pnorm(q=p)
+OtherCoefsTwobounds$Coefs[1,4] - sd(BootstrapSe1[,4])*pnorm(q=p)
+OtherCoefsTwobounds$Coefs[1,5] + sd(BootstrapSe1[,5])*pnorm(q=p)
+OtherCoefsTwobounds$Coefs[1,6] - sd(BootstrapSe1[,6])*pnorm(q=p)
+OtherCoefsTwobounds$Coefs[2,1] - sd(BootstrapSe1[,7])*pnorm(q=p)
+OtherCoefsTwobounds$Coefs[2,2] + sd(BootstrapSe1[,8])*pnorm(q=p)
+OtherCoefsTwobounds$Coefs[2,3] - sd(BootstrapSe1[,9])*pnorm(q=p)
+OtherCoefsTwobounds$Coefs[2,4] + sd(BootstrapSe1[,10])*pnorm(q=p)
+OtherCoefsTwobounds$Coefs[2,5] - sd(BootstrapSe1[,11])*pnorm(q=p)
+OtherCoefsTwobounds$Coefs[2,6] + sd(BootstrapSe1[,12])*pnorm(q=p)
+
+OtherCoefsTwobounds$Coefs
+```
+
+

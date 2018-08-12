@@ -1,0 +1,11 @@
+Package: iivestimatoR
+Title: Implements the imperfect instrumental variable regression
+Version: 0.0.0.9000
+Authors@R: person("Chtonios", email = "first.last@example.com", role = c("aut", "cre"))
+Description: What the package does (one paragraph).
+Depends: R (>= 3.4.2),tidyr, AER, readr, MASS, haven, sandwich
+Imports: tidyr, AER, readr, MASS, haven, sandwich
+License: MIT
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 6.0.1.9000

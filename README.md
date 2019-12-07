@@ -1,6 +1,6 @@
 # Imperfect instrumental variable estimation
 
-Implements the imperfect instrumental variable estimation as seen in the excellent paper "Identification with Imperfect Instruments" by Aviv Nevo and Adam M. Rosen in Review of Economics and Statistics V. 94 2012.
+This package was born out of a term paper on the subject completed in early 2018. The package implements the imperfect instrumental variable estimation as seen in the excellent paper "Identification with Imperfect Instruments" by Aviv Nevo and Adam M. Rosen in Review of Economics and Statistics V. 94 2012.
 
 ## Content
 
